@@ -100,6 +100,7 @@ jobs:
         SWA_DEPLOYMENT_TOKEN=$(az staticwebapp secrets list -n ${{ needs.deploy_infrastructure.outputs.staticWebAppName }} -o tsv --query properties.apiKey)
         echo SWA_DEPLOYMENT_TOKEN=$SWA_DEPLOYMENT_TOKEN >> $GITHUB_ENV
   
+        
     - name: Deploy frontend to Static Web App
       uses: azure/static-web-apps-deploy@v1
       with:
