@@ -70,7 +70,6 @@ jobs:
     needs: [build_frontend, build_backend]
     
     steps:
-    - name: Trigger CD Pipeline
+    - name: CI completed
       run: |
-        echo "CI pipeline completed successfully"
-        echo "CD pipeline will be triggered automatically via workflow_run event"
+        echo "CI completed"
