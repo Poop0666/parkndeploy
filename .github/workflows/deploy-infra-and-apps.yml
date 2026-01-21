@@ -2,11 +2,9 @@ name: CD Deploy Infrastructure and Apps
 
 on: 
   workflow_run:
-    workflows: ["CI Release Pipeline"]
+    workflows: [CI Release Pipeline]
     types:
       - completed
-    branches:
-      - main
 
 permissions:
   # Require write permission to Fetch an OIDC token (required for federated credential) and write it
