@@ -1,7 +1,12 @@
+name: CD Deploy Infrastructure and Apps
+
 on: 
-  push:
-    tags:
-      - '[0-9]+.[0-9]+.[0-9]+'
+  workflow_run:
+    workflows: ["CI Release Pipeline"]
+    types:
+      - completed
+    branches:
+      - main
 
 permissions:
   # Require write permission to Fetch an OIDC token (required for federated credential) and write it
@@ -10,7 +15,7 @@ permissions:
 
 env: 
   AZURE_RG_NAME: rg-${{ vars.PROJECT_NAME }}-${{ vars.AZURE_RESOURCE_IDENTIFIER }}
-  APP_VERSION: ${{ github.ref_name }}
+  APP_VERSION: ${{ github.event.workflow_run.head_branch }}
   
 
 
@@ -18,6 +23,8 @@ jobs:
   deploy_infrastructure:
     runs-on: ubuntu-latest
     environment: production
+    # Only run if CI pipeline succeeded
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
 
     outputs:
       appServiceName: ${{ steps.bicep_deploy.outputs.appServiceName }}
@@ -56,17 +63,13 @@ jobs:
     environment: production
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-    
-    - name: Setup .NET SDK 9.0.x
-      uses: actions/setup-dotnet@v4
+    - name: Download backend artifact
+      uses: actions/download-artifact@v4
       with:
-        dotnet-version: '9.0.x'
-        
-    - name: Publish the app
-      run: dotnet publish -c Release --property:PublishDir=publish # Publish the app to the API project publish folder
-      working-directory: ./backend # Specify where to find the solution file in repository
+        name: backend-build
+        path: ./backend-publish
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        run-id: ${{ github.event.workflow_run.id }}
 
     - name: Login to Azure 
       uses: azure/login@v2
@@ -79,7 +82,7 @@ jobs:
       uses: azure/webapps-deploy@v2
       with: 
         app-name: ${{ needs.deploy_infrastructure.outputs.appServiceName }} # Access to the previous job output to get the appServiceName deployed with bicep
-        package: ./backend/ParkNDeploy.Api/publish # Path to the previously published app
+        package: ./backend-publish # Path to the downloaded artifact
   
       
   deploy_frontend:
@@ -88,16 +91,13 @@ jobs:
     environment: production
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-
-    - name: Inject app version
-      run: |
-        echo "VITE_APP_VERSION=${{ env.APP_VERSION }}" >> $GITHUB_ENV
-
-    - name: Build the app
-      run: npm install && npm run build
-      working-directory: ./frontend    
+    - name: Download frontend artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: frontend-build
+        path: ./frontend-dist
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        run-id: ${{ github.event.workflow_run.id }}
 
     - name: Login to Azure 
       uses: azure/login@v2
@@ -107,15 +107,16 @@ jobs:
         subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }} 
     
     - name: Get Static Web App deployment token
+      id: swa_token
       run: |      
         SWA_DEPLOYMENT_TOKEN=$(az staticwebapp secrets list -n ${{ needs.deploy_infrastructure.outputs.staticWebAppName }} -o tsv --query properties.apiKey)
-        echo SWA_DEPLOYMENT_TOKEN=$SWA_DEPLOYMENT_TOKEN >> $GITHUB_ENV
+        echo "token=$SWA_DEPLOYMENT_TOKEN" >> $GITHUB_OUTPUT
   
     - name: Deploy frontend to Static Web App
       uses: azure/static-web-apps-deploy@v1
       with:
-        azure_static_web_apps_api_token: ${{ env.SWA_DEPLOYMENT_TOKEN }}
-        app_location: frontend/dist
+        azure_static_web_apps_api_token: ${{ steps.swa_token.outputs.token }}
+        app_location: frontend-dist
         action: upload
         skip_app_build: true
         skip_api_build: true
