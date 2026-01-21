@@ -117,5 +117,5 @@ jobs:
         azure_static_web_apps_api_token: ${{ env.SWA_DEPLOYMENT_TOKEN }}
         app_location: frontend/dist
         action: upload
-        skip_app_build: true
+        skip_app_build: true 
         skip_api_build: true
